@@ -1,0 +1,341 @@
+
+#Import library 
+
+library(textreadr) # reading text document into R 
+library(stringr) # simple, consistent wrapper for common string operation
+library(textshape) # Tools for reshaping and restructure text data
+library(pdftools) # support for reading PDF document 
+library(rtweet) # link with Twitter and search #hashtag post 
+library(dplyr) # Grammar of data manipulation
+library(tidytext) # text mining using dpylr, ggplot2 and other tidy tools
+library(tidyverse) # opinionated collection of R packages designed for data science
+library(ggplot2) # visualize the graph 
+library(scales) # Scaling and centering of Matrix 
+library(wordcloud)# another library to show frequency word
+library(RColorBrewer)# required package to use wordcloud
+library(reshape2)
+library(igraph) # TF-IDF package
+library(ggraph)# TF-IDF package 
+
+######################################################
+######## Step 1: Collect data #########
+######################################################
+
+# Use rtweet and store data into object 
+insight_5G <- data.frame(search_tweets("#5G technology", n = 18000, include_rts = FALSE))
+insight_iot <- data.frame(search_tweets("#5G iot ", n = 18000, include_rts = FALSE))
+insight_ai <- data.frame(search_tweets("#5G AI ", n = 18000, include_rts = FALSE))
+
+# select only "text" column for each data set 
+
+insight_5G_text <- data.frame(insight_5G['text'])
+insight_iot_text <- data.frame(insight_iot['text'])
+insight_ai_text <- data.frame(insight_ai['text'])
+
+######################################################
+######## Step 2: Clean data #########
+######################################################
+
+# removing https from the text because is not important for text analysis 
+
+insight_5G_text$stripped_text <- gsub("http.*","",  insight_5G_text$text)
+insight_5G_text$stripped_text <- gsub("https.*","", insight_5G_text$stripped_text)
+
+insight_iot_text$stripped_text <- gsub("http.*","",  insight_iot_text$text)
+insight_iot_text$stripped_text <- gsub("https.*","", insight_iot_text$stripped_text)
+
+insight_ai_text$stripped_text <- gsub("http.*","",  insight_ai_text$text)
+insight_ai_text$stripped_text <- gsub("https.*","", insight_ai_text$stripped_text)
+
+######################################################
+######## Step3: tokenizing the data frame #########
+######################################################
+
+# to make no punctuation, no upper case letters
+
+# Cleaning 5G insight
+
+clean_5G_insight <- insight_5G_text %>%
+  dplyr::select(stripped_text) %>%
+  unnest_tokens(word, stripped_text)
+
+# Cleaning IoT insight 
+clean_iot_insight <- insight_iot_text %>%
+  dplyr::select(stripped_text) %>%
+  unnest_tokens(word, stripped_text)
+
+# cleaning AI insight 
+clean_ai_insight <- insight_ai_text %>%
+  dplyr::select(stripped_text) %>%
+  unnest_tokens(word, stripped_text)
+
+#######################################################
+##########STEP4: token frequencies####################
+#######################################################
+
+#stop words are words that are commonly used in English 
+# e.g. is, I, are, you, me, the, of, etc.
+# Will use the anti_join(stop_words) to remove the stop words
+
+# 5G frequencies
+frequencies_tokens_5G <- clean_5G_insight %>%
+  anti_join(stop_words)
+
+# check the result
+nrow(frequencies_tokens_5G)
+
+# iot frequencies
+frequencies_tokens_iot <- clean_iot_insight %>%
+  anti_join(stop_words) 
+
+#Check the result
+nrow(frequencies_tokens_iot)
+
+# AI frequencies 
+
+frequencies_tokens_ai <- clean_ai_insight %>%
+  anti_join(stop_words) 
+
+#Check the result
+nrow(frequencies_tokens_ai)
+
+# Combining all three data into one 
+
+future_data_frequency <- bind_rows(mutate(frequencies_tokens_5G),
+                         mutate(frequencies_tokens_ai),
+                         mutate(frequencies_tokens_iot))# close bind_row
+
+
+#######################################################
+##### STEP 5:  token frequency histograms ################
+#######################################################
+
+# show top 50 frequency words for combined data 
+
+cleaned_tweet_words <- future_data_frequency %>%
+  count(word, sort=TRUE) %>%
+  top_n(50)%>%
+  mutate(word=reorder(word, n)) %>%
+  ggplot(aes(x = word, y = n))+
+  geom_col()+
+  xlab(NULL)+
+  coord_flip()+
+  labs(y = "Count",
+       x = "Unique words",
+       title = "Count of Unique words found in tweets (Combined data)",
+       subtitle = "stop words removed from the lists")
+print(cleaned_tweet_words)
+
+# ggplot Only 5G insight 
+
+cleaned_5G_tweet_words <- frequencies_tokens_5G %>%
+  count(word, sort=TRUE) %>%
+  top_n(50)%>%
+  mutate(word=reorder(word, n)) %>%
+  ggplot(aes(x = word, y = n))+
+  geom_col()+
+  xlab(NULL)+
+  coord_flip()+
+  labs(y = "Count",
+       x = "Unique words",
+       title = "Count of Unique words found in tweets (5G)",
+       subtitle = "stop words removed from the lists")
+print(cleaned_5G_tweet_words)
+
+
+# ggplot Only IoT insight 
+cleaned_iot_tweet_words <- frequencies_tokens_iot %>%
+  count(word, sort=TRUE) %>%
+  top_n(50)%>%
+  mutate(word=reorder(word, n)) %>%
+  ggplot(aes(x = word, y = n))+
+  geom_col()+
+  xlab(NULL)+
+  coord_flip()+
+  labs(y = "Count",
+       x = "Unique words",
+       title = "Count of Unique words found in tweets (IoT)",
+       subtitle = "stop words removed from the lists")
+print(cleaned_iot_tweet_words)
+
+# ggplot Only AI insight 
+cleaned_ai_tweet_words <- frequencies_tokens_ai %>%
+  count(word, sort=TRUE) %>%
+  top_n(50)%>%
+  mutate(word=reorder(word, n)) %>%
+  ggplot(aes(x = word, y = n))+
+  geom_col()+
+  xlab(NULL)+
+  coord_flip()+
+  labs(y = "Count",
+       x = "Unique words",
+       title = "Count of Unique words found in tweets (AI)",
+       subtitle = "stop words removed from the lists")
+print(cleaned_ai_tweet_words)
+
+
+############### Word cloud - Second way to visualize the frequency words ###################
+
+# Combined data 
+future_data_frequency %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 50))
+
+# 5G 
+frequencies_tokens_5G %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 50))
+
+# IoT
+frequencies_tokens_iot %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 50))
+
+# AI 
+
+frequencies_tokens_ai %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 50))
+
+################################################################################
+
+# with nrc
+future_data_frequency %>%
+  inner_join(get_sentiments("nrc")) %>%
+  count(word, sentiment, sort=TRUE) %>%
+  acast(word ~sentiment, value.var="n", fill=0) %>% # turn data into vertical to horizontal
+  comparison.cloud(color = c("grey10", "grey80"), # set the color
+                   max.words=50, scale = c(1,0.1)) # add scale to see full word cloud of the window
+
+# with bing
+future_data_frequency %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort=TRUE) %>%
+  acast(word ~sentiment, value.var="n", fill=0) %>% # turn data into vertical to horizontal
+  comparison.cloud(color = c("grey10", "grey80"), # set the color
+                   max.words=50, scale = c(1,0.1))
+
+
+############################### TF-IDF ###########################################
+
+#5G stripped_text 
+paired_5G_words <- insight_5G_text %>%
+  dplyr::select(stripped_text) %>%
+  unnest_tokens(paired_words, stripped_text, token = "ngrams", n = 2)
+
+  paired_5G_words %>%
+  count(paired_words, sort = TRUE)
+
+#IoT stripped text
+  paired_iot_words <- insight_iot_text %>%
+    dplyr::select(stripped_text) %>%
+    unnest_tokens(paired_words, stripped_text, token = "ngrams", n = 2)
+  
+  paired_iot_words %>%
+    count(paired_words, sort = TRUE)
+  
+# AI stripped_text 
+  
+  paired_ai_words <- insight_ai_text %>%
+    dplyr::select(stripped_text) %>%
+    unnest_tokens(paired_words, stripped_text, token = "ngrams", n = 2)
+  
+  paired_ai_words %>%
+    count(paired_words, sort = TRUE)
+  
+  ##############################################################################
+  
+# For the 5G Hashtags
+  
+  tweets_5G_separated_words <- paired_5G_words %>%
+    separate(paired_words, c("word1", "word2"), sep = " ")
+  
+  # remove jump words
+  tweets_5G_filtered <- tweets_5G_separated_words %>%
+    filter(!word1 %in% stop_words$word) %>%
+    filter(!word2 %in% stop_words$word)
+  
+  # new bigram counts:
+  words_5G_counts <- tweets_5G_filtered %>%
+    count(word1, word2, sort = TRUE)
+#_______________________________________________________________________________  
+ 
+# For IoT hashtags  
+  
+  # Seperating words
+  tweets_iot_separated_words <- paired_iot_words %>%
+    separate(paired_words, c("word1", "word2"), sep = " ")
+  
+  # remove jump words
+  tweets_iot_filtered <- tweets_iot_separated_words %>%
+    filter(!word1 %in% stop_words$word) %>%
+    filter(!word2 %in% stop_words$word)
+  
+  # new bigram counts:
+  words_iot_counts <- tweets_iot_filtered %>%
+    count(word1, word2, sort = TRUE)
+  
+#_______________________________________________________________________________  
+
+  # For AI hashtags  
+  
+  # Separating words
+  tweets_ai_separated_words <- paired_ai_words %>%
+    separate(paired_words, c("word1", "word2"), sep = " ")
+  
+  # remove jump words
+  tweets_ai_filtered <- tweets_ai_separated_words %>%
+    filter(!word1 %in% stop_words$word) %>%
+    filter(!word2 %in% stop_words$word)
+  
+  # new bigram counts:
+  words_ai_counts <- tweets_ai_filtered %>%
+    count(word1, word2, sort = TRUE)
+  
+  
+
+############################ Visualizing the graph 5G ############################# 
+    words_5G_counts %>%
+    filter(n >= 8) %>%
+    graph_from_data_frame() %>%
+    ggraph(layout = "fr") +
+    geom_edge_link()+
+    geom_node_point()+
+    geom_node_point(color = "darkslategray4", size = 3) +
+    geom_node_text(aes(label = name), vjust = 1.8, size = 3) +
+    labs(title = "Word Network: Tweets using the hashtag - 5G ",
+         subtitle = "Text mining twitter data ",
+         x = "", y = "")
+  
+  ############################ Visualizing the graph IoT ############################# 
+  words_iot_counts %>%
+    filter(n >= 12) %>%
+    graph_from_data_frame() %>%
+    ggraph(layout = "fr") +
+    geom_edge_link()+
+    geom_node_point()+
+    geom_node_point(color = "darkslategray4", size = 3) +
+    geom_node_text(aes(label = name), vjust = 1.8, size = 3) +
+    labs(title = "Word Network: Tweets using the hashtag - IoT ",
+         subtitle = "Text mining twitter data ",
+         x = "", y = "")
+  
+  ############################ Visualizing the graph AI ############################# 
+  words_ai_counts %>%
+    filter(n >= 10) %>%
+    graph_from_data_frame() %>%
+    ggraph(layout = "fr") +
+    geom_edge_link()+
+    geom_node_point()+
+    geom_node_point(color = "darkslategray4", size = 3) +
+    geom_node_text(aes(label = name), vjust = 1.8, size = 3) +
+    labs(title = "Word Network: Tweets using the hashtag - AI ",
+         subtitle = "Text mining twitter data ",
+         x = "", y = "")
+  
+  
+  
+  
+  
+  
+  
